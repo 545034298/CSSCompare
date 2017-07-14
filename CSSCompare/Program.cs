@@ -238,7 +238,7 @@ namespace SPBert.CSSCompare
                     }
 
                     foreach (string value in Styles[key])
-                        Console.WriteLine(extraIndentation + "\t" + value);
+                        Console.WriteLine(extraIndentation + "\t" + value + ";");
                     Console.WriteLine(extraIndentation + "}");
 
                     lastMediaBlock = mediaBlock;
