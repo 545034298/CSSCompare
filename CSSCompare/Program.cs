@@ -84,6 +84,7 @@ namespace SPBert.CSSCompare
             Dictionary<string, HashSet<string>> Styles = new Dictionary<string, HashSet<string>>();
 
             bool inComment = false;
+            bool inStyles = false;
             string currentMediaBlock = "";
             string currentElement = "";
             string lastLine = "";
@@ -110,7 +111,7 @@ namespace SPBert.CSSCompare
                         case "{":
                             if (!lastLine.StartsWith("@"))
                             {
-                                currentElement = lastLine;
+                                inStyles = true;
 
                                 if (!Styles.ContainsKey(currentMediaBlock + "|" + currentElement))
                                     Styles.Add(currentMediaBlock + "|" + currentElement, new HashSet<string>());
@@ -118,13 +119,19 @@ namespace SPBert.CSSCompare
                             break;
                         case "}":
                             if (!string.IsNullOrEmpty(currentElement))
+                            {
+                                inStyles = false;
                                 currentElement = "";
+                            }
                             else
                                 currentMediaBlock = "";
                             break;
                         default:
-                            if (!string.IsNullOrEmpty(currentElement))
+                            if (inStyles)
                                 Styles[currentMediaBlock + "|" + currentElement].Add(line.Trim());
+                            else
+                                // Another selector, append to currentElement
+                                currentElement += line;
                             break;
                     }
                 }
@@ -133,6 +140,9 @@ namespace SPBert.CSSCompare
             #endregion Build Original Objects
 
             #region Compare Updated Objects
+
+            inComment = false;
+            inStyles = false;
             currentMediaBlock = "";
             currentElement = "";
             lastLine = "";
@@ -155,7 +165,7 @@ namespace SPBert.CSSCompare
                         case "{":
                             if (!lastLine.StartsWith("@"))
                             {
-                                currentElement = lastLine;
+                                inStyles = true;
 
                                 if (!Styles.ContainsKey(currentMediaBlock + "|" + currentElement))
                                     Styles.Add(currentMediaBlock + "|" + currentElement, new HashSet<string>());
@@ -163,17 +173,23 @@ namespace SPBert.CSSCompare
                             break;
                         case "}":
                             if (!string.IsNullOrEmpty(currentElement))
+                            {
+                                inStyles = false;
                                 currentElement = "";
+                            }
                             else
                                 currentMediaBlock = "";
                             break;
                         default:
-                            if (!string.IsNullOrEmpty(currentElement))
+                            if (inStyles)
                             {
                                 string normalizedLine = line.Trim();
                                 if (Styles[currentMediaBlock + "|" + currentElement].Contains(normalizedLine))
                                     Styles[currentMediaBlock + "|" + currentElement].Remove(normalizedLine);
                             }
+                            else
+                                // Another selector, append to currentElement
+                                currentElement += line;
                             break;
                     }
                 }
@@ -209,7 +225,18 @@ namespace SPBert.CSSCompare
                     }
                     string element = key.Substring(key.IndexOf("|") + 1);
 
-                    Console.WriteLine(extraIndentation + element + "{");
+                    // Split selectors and place one on a line
+                    string[] selectors = element.Split(',');
+                    for (int i = 0; i < selectors.Length; ++i)
+                    {
+                        string selectorLine = extraIndentation + selectors[i];
+                        if (i == selectors.Length - 1)
+                            selectorLine += " {";
+                        else
+                            selectorLine += ",";
+                        Console.WriteLine(selectorLine);
+                    }
+
                     foreach (string value in Styles[key])
                         Console.WriteLine(extraIndentation + "\t" + value);
                     Console.WriteLine(extraIndentation + "}");
@@ -234,7 +261,7 @@ namespace SPBert.CSSCompare
             // Collapse whitespace.
             input = input.Replace('\r', '\n');
             input = input.Replace("\t", "");
-            
+
             while (input.IndexOf("  ") > -1)
                 input = input.Replace("  ", " ");
             #endregion Preliminary Cleanup
@@ -270,7 +297,8 @@ namespace SPBert.CSSCompare
             while (semicolon > -1 && !string.IsNullOrEmpty(currentLine))
             {
                 // Handle empty lines.
-                if (semicolon == 0) {
+                if (semicolon == 0)
+                {
                     if (currentLine.Length > 1)
                         currentLine = currentLine.Substring(1);
                     else
