@@ -95,7 +95,14 @@ namespace SPBert.CSSCompare
             {
                 if (line.StartsWith("@"))
                 {
-                    currentMediaBlock = line.Substring(0, line.Length);
+                    if (!line.EndsWith(";"))
+                    {
+                        currentMediaBlock = line.Substring(0, line.Length);
+                    }
+                    else
+                    {
+                        Styles.Add(line + "|", new HashSet<string>());
+                    }
                 }
                 else if (line == "*/")
                 {
@@ -109,7 +116,7 @@ namespace SPBert.CSSCompare
                             inComment = true;
                             break;
                         case "{":
-                            if (!lastLine.StartsWith("@"))
+                            if (!lastLine.StartsWith("@") || lastLine == "@font-face")
                             {
                                 inStyles = true;
 
@@ -118,10 +125,14 @@ namespace SPBert.CSSCompare
                             }
                             break;
                         case "}":
-                            if (!string.IsNullOrEmpty(currentElement))
+                            if (!string.IsNullOrEmpty(currentElement) || currentMediaBlock == "@font-face")
                             {
                                 inStyles = false;
                                 currentElement = "";
+                                if (currentMediaBlock == "@font-face")
+                                {
+                                    currentMediaBlock = "";
+                                }
                             }
                             else
                                 currentMediaBlock = "";
@@ -152,7 +163,19 @@ namespace SPBert.CSSCompare
             foreach (string line in lines)
             {
                 if (line.StartsWith("@"))
-                    currentMediaBlock = line;
+                {
+                    if (!line.EndsWith(";"))
+                    {
+                        currentMediaBlock = line.Substring(0, line.Length);
+                    }
+                    else
+                    {
+                        if (Styles.Keys.Contains(line + "|"))
+                        {
+                            Styles.Remove(line + "|");
+                        }
+                    }
+                }
                 else if (line == "*/")
                     inComment = false;
                 else if (!inComment)
@@ -163,7 +186,7 @@ namespace SPBert.CSSCompare
                             inComment = true;
                             break;
                         case "{":
-                            if (!lastLine.StartsWith("@"))
+                            if (!lastLine.StartsWith("@") || lastLine == "@font-face")
                             {
                                 inStyles = true;
 
@@ -172,10 +195,14 @@ namespace SPBert.CSSCompare
                             }
                             break;
                         case "}":
-                            if (!string.IsNullOrEmpty(currentElement))
+                            if (!string.IsNullOrEmpty(currentElement) || currentMediaBlock == "@font-face")
                             {
                                 inStyles = false;
                                 currentElement = "";
+                                if (currentMediaBlock == "@font-face")
+                                {
+                                    currentMediaBlock = "";
+                                }
                             }
                             else
                                 currentMediaBlock = "";
@@ -243,6 +270,14 @@ namespace SPBert.CSSCompare
 
                     lastMediaBlock = mediaBlock;
                 }
+                else
+                {
+                    string mediaBlock = key.Substring(0, key.IndexOf("|"));
+                    if (mediaBlock.StartsWith("@") && mediaBlock.EndsWith(";"))
+                    {
+                        Console.WriteLine(mediaBlock);
+                    }
+                }
             }
 
             if (!string.IsNullOrEmpty(lastMediaBlock))
@@ -266,7 +301,7 @@ namespace SPBert.CSSCompare
                 input = input.Replace("  ", " ");
             #endregion Preliminary Cleanup
 
-            string[] lines = input.Split('\n');
+            string[] lines = input.Split(new char[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
             StringBuilder output = new StringBuilder();
 
@@ -292,6 +327,29 @@ namespace SPBert.CSSCompare
             // Eliminate trailing and leading whitespace.
             string currentLine = line.Trim();
 
+            // Move each of the following characters to its own line.
+            string[] specialCharacters = new string[] { "{", "}", "/*", "*/" };
+
+            foreach (string specialCharacter in specialCharacters)
+            {
+                int openCharacter = currentLine.IndexOf(specialCharacter);
+                while (openCharacter > -1 && !string.IsNullOrEmpty(currentLine))
+                {
+                    if (openCharacter == 0)
+                        output.Append(specialCharacter + "\n");
+                    else
+                    {
+                        AddNormalizedLine(currentLine.Substring(0, openCharacter), ref output);
+                        output.Append(specialCharacter + "\n");
+                    }
+
+                    currentLine = currentLine.Substring(openCharacter + specialCharacter.Length);
+                    openCharacter = currentLine.IndexOf(specialCharacter);
+                }
+            }
+
+
+
             // Break individual styles into their own lines.
             int semicolon = currentLine.IndexOf(";");
             while (semicolon > -1 && !string.IsNullOrEmpty(currentLine))
@@ -315,29 +373,16 @@ namespace SPBert.CSSCompare
                 else
                 {
                     // Remove trailing semicolon.
-                    currentLine = currentLine.Substring(0, currentLine.Length - 1);
-                }
-                semicolon = currentLine.IndexOf(";");
-            }
-
-            // Move each of the following characters to its own line.
-            string[] specialCharacters = new string[] { "{", "}", "/*", "*/" };
-            foreach (string specialCharacter in specialCharacters)
-            {
-                int openCharacter = currentLine.IndexOf(specialCharacter);
-                while (openCharacter > -1 && !string.IsNullOrEmpty(currentLine))
-                {
-                    if (openCharacter == 0)
-                        output.Append(specialCharacter + "\n");
+                    if (!currentLine.StartsWith("@"))
+                    {
+                        currentLine = currentLine.Substring(0, currentLine.Length - 1);
+                    }
                     else
                     {
-                        AddNormalizedLine(currentLine.Substring(0, openCharacter), ref output);
-                        output.Append(specialCharacter + "\n");
+                        break;
                     }
-
-                    currentLine = currentLine.Substring(openCharacter + specialCharacter.Length);
-                    openCharacter = currentLine.IndexOf(specialCharacter);
                 }
+                semicolon = currentLine.IndexOf(";");
             }
 
             // Append newline.
